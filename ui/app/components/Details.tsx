@@ -208,7 +208,7 @@ export const PaymentDetail: React.FC<PaymentDetailProps> = ({
       </div>
 
       {/* Actions */}
-      <div
+      {/* <div
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
@@ -233,7 +233,7 @@ export const PaymentDetail: React.FC<PaymentDetailProps> = ({
         >
           Export Case
         </Button>
-      </div>
+      </div> */}
     </div>
   );
 };
