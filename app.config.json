@@ -1,8 +1,8 @@
 {
-  "environmentUrl": "https://lpi12945.apps.dynatrace.com/",
+  "environmentUrl": "https://wsi73818.apps.dynatrace.com/",
   "app": {
     "name": "mock-payment-dashboard-V2",
-    "version": "0.0.8",
+    "version": "0.1.0",
     "description": "A starting project with routing, fetching data, and charting",
     "id": "my.mock.payment.dashboard.v.2",
     "scopes": [

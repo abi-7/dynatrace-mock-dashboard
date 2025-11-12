@@ -36,8 +36,8 @@ export const IncidentsHub: React.FC<IncidentsHubProps> = ({
   incidents,
   applications,
 }) => {
-  const APP_ENVIRONMENT_URL = "https://lpi12945.apps.dynatrace.com";
-  const problem_ID = "-3995542554643361402_1762963560000V2";
+  const APP_ENVIRONMENT_URL = "https://wsi73818.apps.dynatrace.com";
+  const problem_ID = "8695044694667970680_1762982400000V2";
   //const baseUrl = window.location.origin;
 
   return (
