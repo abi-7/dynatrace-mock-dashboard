@@ -169,41 +169,64 @@ export const PaymentDetail: React.FC<PaymentDetailProps> = ({
           End-to-End Flow
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {p.appPath.map((h: any, i: number) => {
-            const app = applications.find((a) => a.id === h.appId);
-            return (
-              <div
-                key={i}
-                style={{ display: "flex", gap: 12, alignItems: "flex-start" }}
-              >
+          {console.log("Full appPath length:", p.appPath.length)}
+          {console.log(
+            "Unique entries:",
+            new Set(p.appPath.map((h) => `${h.appId}-${h.ts}`)).size
+          )}
+
+          {p.appPath
+            .filter((h: any, i: number, arr: any[]) => {
+              // Keep only the first occurrence of each unique appId+timestamp combo
+              return (
+                arr.findIndex((x) => x.appId === h.appId && x.ts === h.ts) === i
+              );
+            })
+            .map((h: any, i: number) => {
+              console.log("Flow step:", {
+                index: i,
+                appId: h.appId,
+                timestamp: h.ts,
+                status: h.status,
+                formattedTime: new Date(h.ts).toLocaleString(),
+                compositeKey: `${h.appId}-${h.ts}-${i}`,
+              });
+
+              const app = applications.find((a) => a.id === h.appId);
+              return (
                 <div
-                  style={{
-                    marginTop: 6,
-                    height: 10,
-                    width: 10,
-                    minWidth: 10,
-                    borderRadius: "50%",
-                    background: appHealth(h.appId) > 90 ? "#22c55e" : "#f97316",
-                  }}
-                />
-                <div style={{ flex: 1 }}>
+                  key={`${h.appId}-${h.ts}-${i}`}
+                  style={{ display: "flex", gap: 12, alignItems: "flex-start" }}
+                >
                   <div
-                    style={{ fontWeight: 500, fontSize: 14, marginBottom: 3 }}
-                  >
-                    {app?.name}{" "}
-                    <span
-                      style={{ color: "#666", fontSize: 12, marginBottom: 2 }}
+                    style={{
+                      marginTop: 6,
+                      height: 10,
+                      width: 10,
+                      minWidth: 10,
+                      borderRadius: "50%",
+                      background:
+                        appHealth(h.appId) > 90 ? "#22c55e" : "#f97316",
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{ fontWeight: 500, fontSize: 14, marginBottom: 3 }}
                     >
-                      • {new Date(h.ts).toLocaleString()}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, marginBottom: 2 }}>
-                    {h.status}
+                      {app?.name}{" "}
+                      <span
+                        style={{ color: "#666", fontSize: 12, marginBottom: 2 }}
+                      >
+                        • {new Date(h.ts).toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, marginBottom: 2 }}>
+                      {h.status}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
         </div>
       </div>
 

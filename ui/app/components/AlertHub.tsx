@@ -36,6 +36,10 @@ export const IncidentsHub: React.FC<IncidentsHubProps> = ({
   incidents,
   applications,
 }) => {
+  const APP_ENVIRONMENT_URL = "https://lpi12945.apps.dynatrace.com";
+  const problem_ID = "-3995542554643361402_1762963560000V2";
+  //const baseUrl = window.location.origin;
+
   return (
     <Card>
       <div style={{ padding: 8 }}>
@@ -95,13 +99,18 @@ export const IncidentsHub: React.FC<IncidentsHubProps> = ({
                     {x.id} • opened {timeAgo(x.opened)}
                   </Typography>
                   <Link
-                    /* eslint-disable-next-line no-secrets/no-secrets */
-                    href={`https://wkf10640.apps.dynatrace.com/ui/apps/dynatrace.davis.problems/problem/2999564033672670979_1762527240000V2`}
-                    underline="hover"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(
+                        `${APP_ENVIRONMENT_URL}/ui/apps/dynatrace.davis.problems/problem/${problem_ID}`,
+                        "_blank"
+                      );
+                    }}
                     style={{
                       display: "block",
                       marginTop: 8,
                       fontSize: "0.875rem",
+                      cursor: "pointer",
                     }}
                   >
                     Incident Drill Down →
