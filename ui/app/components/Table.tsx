@@ -8,6 +8,7 @@ import {
   TableCell,
   TableBody,
   Chip,
+  Box,
 } from "@mui/material";
 import { Card, CardContent } from "./CardComponent"; // your custom Card component
 import { Button } from "./Button";
@@ -60,62 +61,105 @@ export const PaymentsTable: React.FC<PaymentsTableProps> = ({
             <Typography variant="subtitle2" style={{ marginBottom: 16 }}>
               Results ({rows.length})
             </Typography>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>Client</TableCell>
-                  <TableCell>Direction</TableCell>
-                  <TableCell>Value</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>IDs</TableCell>
-                  <TableCell></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {view.map((p) => (
-                  <TableRow key={p.id} hover>
-                    <TableCell>
-                      {new Date(p.created).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" style={{ fontWeight: 500 }}>
-                        {p.client}
-                      </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        Benef: {p.beneficiary}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{p.direction}</TableCell>
-                    <TableCell>{formatMoney(p.value, p.currency)}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={p.status}
-                        size="small"
-                        color={p.status === "Failed" ? "error" : "default"}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption" display="block">
-                        UETR: {p.uetr}
-                      </Typography>
-                      <Typography variant="caption" display="block">
-                        ICN: {p.icn}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="md"
-                        onClick={() => setSelected(p)}
-                      >
-                        Details
-                      </Button>
-                    </TableCell>
+
+            <Box sx={{ overflowX: "auto", width: "100%" }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: "140px" }}>Time</TableCell>
+                    <TableCell sx={{ width: "160px" }}>Client</TableCell>
+                    <TableCell sx={{ width: "100px" }}>Direction</TableCell>
+                    <TableCell sx={{ width: "120px" }}>Value</TableCell>
+                    <TableCell sx={{ width: "130px" }}>Status</TableCell>
+                    <TableCell sx={{ width: "200px" }}>IDs</TableCell>
+                    <TableCell sx={{ width: "90px" }}></TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {view.map((p) => (
+                    <TableRow key={p.id} hover>
+                      <TableCell sx={{ fontSize: "0.875rem" }}>
+                        {new Date(p.created).toLocaleString("en-US", {
+                          month: "numeric",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" style={{ fontWeight: 500 }}>
+                          {p.client}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="textSecondary"
+                          sx={{ display: "block" }}
+                        >
+                          Benef:
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="textSecondary"
+                          sx={{
+                            display: "block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {p.beneficiary}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{p.direction}</TableCell>
+                      <TableCell>{formatMoney(p.value, p.currency)}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={p.status}
+                          size="small"
+                          color={p.status === "Failed" ? "error" : "default"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="caption"
+                          display="block"
+                          sx={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={p.uetr}
+                        >
+                          UETR: {p.uetr}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          display="block"
+                          sx={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={p.icn}
+                        >
+                          ICN: {p.icn}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="md"
+                          onClick={() => setSelected(p)}
+                        >
+                          Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
 
             {/* Pagination */}
             <div

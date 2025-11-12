@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Typography,
   Tabs,
@@ -24,6 +24,7 @@ import { AppsHealth } from "app/components/AppHealth";
 import { Card, CardContent } from "app/components/CardComponent";
 import { PaymentsTable } from "app/components/Table";
 //import { SubwayView } from "app/components/SubwayWidget"; //old subway view
+import { queryExecutionClient } from "@dynatrace-sdk/client-query";
 
 const applications = [
   { id: "mailbox", name: "Mailbox", tier: "Edge", slaMs: 120000 },
@@ -33,102 +34,370 @@ const applications = [
   { id: "phubcps", name: "PHUB CPS", tier: "Core", slaMs: 300000 },
 ];
 
-const demoPayments = Array.from({ length: 60 }).map((_, i) => {
-  const directions = ["Incoming", "Outgoing", "Internal"];
-  const statuses = ["Processing", "Completed", "On Hold", "Failed", "Queued"];
-  const appsPath = [
-    "mailbox",
-    "phubip",
-    Math.random() < 0.5 ? "phubeft" : "phublvpe",
-    "phubcps",
-  ];
-  const amount = Math.round((Math.random() * 250000 + 5000) * 100) / 100;
-  const base = Date.now() - Math.floor(Math.random() * 72) * 60 * 60 * 1000;
-  const uetr = `UETR-${(100000 + i).toString(36)}-${(
-    (Math.random() * 1e6) |
-    0
-  ).toString(36)}`.toUpperCase();
-  const icn = `ICN${((Math.random() * 1e9) | 0).toString().padStart(9, "0")}`;
+// Event type to application stage mapping
+const EVENT_TYPE_TO_STAGE = {
+  ip_pay_in: "phubip", // Data entering PHUB IP
+  eft_pay_in: "phubeft", // Data entering PHUB EFT from IP
+  eft_lvpe_risk_update: "phublvpe", // Data from EFT to LVPE
+  lvpe_cpa_aft: "phublvpe", // Data also entering LVPE
+};
 
-  const hops = [] as Array<{
-    appId: string;
-    ts: number;
-    status: string;
-    note?: string;
-  }>;
-  let t = base;
-  for (const appId of appsPath) {
-    const s = ["Received", "Validated", "Routed", "Booked", "Settled"][
-      Math.floor(Math.random() * 5)
-    ];
-    hops.push({
-      appId,
-      ts: t,
-      status: s,
-      note: Math.random() < 0.1 ? "Retry due to timeout" : "",
+async function fetchPaymentsFromBizEvents() {
+  try {
+    const dqlQuery = `
+       fetch bizevents
+      | filter (event.type == "ip_pay_in" AND attribute.subtype == "PAY_IN")
+    OR (event.type == "eft_pay_in" AND attribute.subtype == "PAY_IN")
+    OR (event.type == "eft_lvpe_risk_update" AND attribute.subtype == "LVPE_RISK_UPDATE")
+    OR (event.type == "lvpe_cpa_aft" AND attribute.subtype == "CPA_AFT" AND attribute.status == "S_InPTComplete")
+      | fields 
+          eventId = attribute.event_id,
+          eventType = event.type,
+          timestamp,
+          batchId = attribute.batch_id,
+          transactionId = attribute.transmission_id,
+          objAuditSeq = attribute.obj_audit_seq,
+          auditSeq = attribute.audit_seq,
+          status = attribute.status,
+          auxStatus = attribute.aux_status,
+          sender = attribute.sender,
+          receiver = attribute.receiver,
+          ownerId = attribute.owner_id,
+          cid = attribute.cid,
+          altId = attribute.alt_id,
+          uid = attribute.uid,
+          objType = attribute.obj_type,
+          objClass = attribute.obj_class,
+          subtype = attribute.subtype,
+          txnData1 = attribute.txn_data1,
+          txnData2 = attribute.txn_data2,
+          txnSequence = attribute.txn_sequence,
+          masterFlag = attribute.master_flag,
+          techPriority = attribute.tech_priority,
+          userComment = attribute.user_comment,
+          rawData = attribute.raw_data,
+          isfFmtId = attribute.isf_fmt_id,
+          isfData = attribute.isf_data,
+          statusDateRaw = attribute.status_date_raw,
+          timeoutRaw = attribute.timeout_raw,
+          createdRaw = attribute.created_raw,
+          appId = attribute.app_id,
+          user = attribute.user
+      | sort timestamp desc
+      | limit 1000
+    `;
+
+    console.log("Executing DQL query for bizevents...");
+
+    const response = await queryExecutionClient.queryExecute({
+      body: {
+        query: dqlQuery,
+      },
     });
-    t += 30000 + Math.floor(Math.random() * 90000);
+
+    if (!response.requestToken) {
+      console.error("No request token received for incidents query");
+      return [];
+    }
+
+    console.log("Request token received:", response.requestToken);
+
+    // Poll for results
+    // Poll for results with retry logic
+    let result;
+    let attempts = 0;
+    const maxAttempts = 20; // Poll up to 20 times
+
+    while (attempts < maxAttempts) {
+      result = await queryExecutionClient.queryPoll({
+        requestToken: response.requestToken,
+      });
+
+      console.log(`Poll attempt ${attempts + 1}:`, {
+        state: result.state,
+        recordCount: result.result?.records?.length || 0,
+      });
+
+      // Check if query is complete
+      if (result.state === "SUCCEEDED") {
+        break;
+      }
+
+      if (result.state === "FAILED") {
+        throw new Error("Query execution failed");
+      }
+
+      // Wait before next poll (exponential backoff)
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(1000 * Math.pow(1.5, attempts), 5000))
+      );
+      attempts++;
+    }
+
+    if (!result || result.state !== "SUCCEEDED") {
+      throw new Error("Query did not complete in time");
+    }
+
+    if (!result.result?.records || result.result.records.length === 0) {
+      console.warn("No bizevents found. Returning empty array.");
+      return [];
+    }
+
+    console.log(
+      `Successfully fetched ${result.result.records.length} bigevents`
+    );
+
+    const uniqueStatuses = new Set(result.result.records.map((r) => r.status));
+    console.log("Unique status values found:", Array.from(uniqueStatuses));
+
+    // Group events by transaction to build the application path
+    const transactionMap = new Map<string, any[]>();
+
+    result.result.records.forEach((record: any) => {
+      const txnKey = record.batchId || record.transactionId || record.eventId;
+      if (!transactionMap.has(txnKey)) {
+        transactionMap.set(txnKey, []);
+      }
+      transactionMap.get(txnKey)!.push(record);
+    });
+
+    // Convert to payment objects
+    const payments: any[] = [];
+    let paymentId = 1;
+
+    transactionMap.forEach((events, txnKey) => {
+      events.sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+
+      const firstEvent = events[0];
+      const lastEvent = events[events.length - 1];
+
+      const appPath = events.map((evt: any) => ({
+        appId:
+          EVENT_TYPE_TO_STAGE[
+            evt.eventType as keyof typeof EVENT_TYPE_TO_STAGE
+          ] || "unknown",
+        ts: new Date(evt.timestamp).getTime(),
+        status: evt.status || "Unknown",
+        note: evt.userComment || "",
+        eventType: evt.eventType,
+      }));
+
+      const direction = firstEvent.sender
+        ? "Incoming"
+        : firstEvent.receiver
+        ? "Outgoing"
+        : "Internal";
+
+      const amount = parseFloat(
+        firstEvent.txnData1 || firstEvent.txnData2 || "0"
+      );
+
+      payments.push({
+        id: paymentId++,
+        direction,
+        channel: "ISO 20022",
+        status: formatStatus((lastEvent.status || "Processing").trim()),
+        value:
+          amount || Math.round((Math.random() * 250000 + 5000) * 100) / 100,
+        currency: "CAD",
+        client: firstEvent.sender || "Unknown Client",
+        beneficiary: lastEvent.receiver || "Unknown Beneficiary",
+        originator: firstEvent.ownerId || "System",
+        appPath,
+        created: new Date(firstEvent.timestamp).getTime(),
+        lastUpdate: new Date(lastEvent.timestamp).getTime(),
+        scotiaClientId: firstEvent.cid || firstEvent.altId || `SC-${paymentId}`,
+        segmentation:
+          firstEvent.techPriority === "HIGH" ? "High Value" : "Retail",
+        paymentType: "EFT",
+        uetr: firstEvent.uid || firstEvent.eventId || `UETR-${paymentId}`,
+        icn: firstEvent.batchId || `ICN${paymentId}`,
+        ackState:
+          firstEvent.auxStatus === "ACK"
+            ? "ACK"
+            : firstEvent.auxStatus === "NACK"
+            ? "NACK"
+            : "PENDING",
+        pacs002:
+          firstEvent.masterFlag === "1"
+            ? "pacs.002 received"
+            : "pacs.002 pending",
+        rawEvents: events,
+      });
+    });
+
+    return payments;
+  } catch (error) {
+    console.error("Error fetching bizevents from Grail:", error);
+    throw error;
   }
+}
 
-  const ackState = Math.random() < 0.85 ? "ACK" : "NACK";
-  const pacs002 =
-    Math.random() < 0.8 ? "pacs.002 received" : "pacs.002 pending";
-
+async function fetchApplicationHealthFromDynatrace() {
+  //mock data
   return {
-    id: i + 1,
-    direction: directions[Math.floor(Math.random() * directions.length)],
-    channel: Math.random() < 0.5 ? "SWIFT" : "ISO 20022",
-    status: statuses[Math.floor(Math.random() * statuses.length)],
-    value: amount,
-    currency: "CAD",
-    client: ["Acme Corp", "Globex", "Wayne Ent.", "Initech", "Stark Ind."][
-      Math.floor(Math.random() * 5)
-    ],
-    beneficiary: ["Contoso LLC", "Soylent", "Umbrella", "Wonka", "Tyrell"][
-      Math.floor(Math.random() * 5)
-    ],
-    originator: ["Acme Treasury", "Payroll", "ERP", "Mobile", "Branch"][
-      Math.floor(Math.random() * 5)
-    ],
-    appPath: hops,
-    created: base,
-    lastUpdate: t,
-    scotiaClientId: `SC-${(10000 + i).toString()}`,
-    segmentation: Math.random() < 0.4 ? "High Value" : "Retail",
-    paymentType: "EFT",
-    uetr,
-    icn,
-    ackState,
-    pacs002,
+    mailbox: 96,
+    phubip: 94,
+    phubeft: 91,
+    phublvpe: 89,
+    phubcps: 97,
   };
-});
+}
 
-const incidents = [
-  {
-    id: "INC-4310",
-    severity: "High",
-    title: "PHUB LVPE settlement delay",
-    appId: "phublvpe",
-    opened: Date.now() - 35 * 60 * 1000,
-    status: "Investigating",
-  },
-  {
-    id: "INC-4321",
-    severity: "Medium",
-    title: "EFT backlog in PHUB EFT",
-    appId: "phubeft",
-    opened: Date.now() - 2 * 60 * 60 * 1000,
-    status: "Mitigated",
-  },
-  {
-    id: "AL-7802",
-    severity: "Low",
-    title: "Mailbox ingress latency",
-    appId: "mailbox",
-    opened: Date.now() - 20 * 60 * 1000,
-    status: "Monitoring",
-  },
-];
+async function fetchIncidentsFromDynatrace() {
+  //mock data
+  return [
+    {
+      id: "INC-4310",
+      severity: "Medium",
+      title: "PHUB LVPE processing delay detected",
+      appId: "phublvpe",
+      opened: Date.now() - 35 * 60 * 1000,
+      status: "Monitoring",
+    },
+  ];
+}
+
+// const demoPayments = Array.from({ length: 60 }).map((_, i) => {
+//   const directions = ["Incoming", "Outgoing", "Internal"];
+//   const statuses = ["Processing", "Completed", "On Hold", "Failed", "Queued"];
+//   const appsPath = [
+//     "mailbox",
+//     "phubip",
+//     Math.random() < 0.5 ? "phubeft" : "phublvpe",
+//     "phubcps",
+//   ];
+//   const amount = Math.round((Math.random() * 250000 + 5000) * 100) / 100;
+//   const base = Date.now() - Math.floor(Math.random() * 72) * 60 * 60 * 1000;
+//   const uetr = `UETR-${(100000 + i).toString(36)}-${(
+//     (Math.random() * 1e6) |
+//     0
+//   ).toString(36)}`.toUpperCase();
+//   const icn = `ICN${((Math.random() * 1e9) | 0).toString().padStart(9, "0")}`;
+
+//   const hops = [] as Array<{
+//     appId: string;
+//     ts: number;
+//     status: string;
+//     note?: string;
+//   }>;
+//   let t = base;
+//   for (const appId of appsPath) {
+//     const s = ["Received", "Validated", "Routed", "Booked", "Settled"][
+//       Math.floor(Math.random() * 5)
+//     ];
+//     hops.push({
+//       appId,
+//       ts: t,
+//       status: s,
+//       note: Math.random() < 0.1 ? "Retry due to timeout" : "",
+//     });
+//     t += 30000 + Math.floor(Math.random() * 90000);
+//   }
+
+//   const ackState = Math.random() < 0.85 ? "ACK" : "NACK";
+//   const pacs002 =
+//     Math.random() < 0.8 ? "pacs.002 received" : "pacs.002 pending";
+
+//   return {
+//     id: i + 1,
+//     direction: directions[Math.floor(Math.random() * directions.length)],
+//     channel: Math.random() < 0.5 ? "SWIFT" : "ISO 20022",
+//     status: statuses[Math.floor(Math.random() * statuses.length)],
+//     value: amount,
+//     currency: "CAD",
+//     client: ["Acme Corp", "Globex", "Wayne Ent.", "Initech", "Stark Ind."][
+//       Math.floor(Math.random() * 5)
+//     ],
+//     beneficiary: ["Contoso LLC", "Soylent", "Umbrella", "Wonka", "Tyrell"][
+//       Math.floor(Math.random() * 5)
+//     ],
+//     originator: ["Acme Treasury", "Payroll", "ERP", "Mobile", "Branch"][
+//       Math.floor(Math.random() * 5)
+//     ],
+//     appPath: hops,
+//     created: base,
+//     lastUpdate: t,
+//     scotiaClientId: `SC-${(10000 + i).toString()}`,
+//     segmentation: Math.random() < 0.4 ? "High Value" : "Retail",
+//     paymentType: "EFT",
+//     uetr,
+//     icn,
+//     ackState,
+//     pacs002,
+//   };
+// });
+
+// const incidents = [
+//   {
+//     id: "INC-4310",
+//     severity: "High",
+//     title: "PHUB LVPE settlement delay",
+//     appId: "phublvpe",
+//     opened: Date.now() - 35 * 60 * 1000,
+//     status: "Investigating",
+//   },
+//   {
+//     id: "INC-4321",
+//     severity: "Medium",
+//     title: "EFT backlog in PHUB EFT",
+//     appId: "phubeft",
+//     opened: Date.now() - 2 * 60 * 60 * 1000,
+//     status: "Mitigated",
+//   },
+//   {
+//     id: "AL-7802",
+//     severity: "Low",
+//     title: "Mailbox ingress latency",
+//     appId: "mailbox",
+//     opened: Date.now() - 20 * 60 * 1000,
+//     status: "Monitoring",
+//   },
+// ];
+
+//helper functions
+function formatStatus(rawStatus: string): string {
+  // Trim the input to handle any trailing/leading spaces
+  const trimmedStatus = rawStatus?.trim() || "";
+
+  const statusMap: Record<string, string> = {
+    S_OutTxnComplete: "Completed",
+    S_WaitHostResponse: "Processing",
+    S_InTxnHostAccepted: "Host Accepted",
+    "S_AwaitingPosting/DistributionResponse": "Awaiting Posting/Distribution",
+    /* eslint-disable-next-line no-secrets/no-secrets */
+    S_WaitingLVPEResponse: "Waiting LVPE Response",
+    /* eslint-disable-next-line no-secrets/no-secrets */
+    S_WaitingPrefundHoldResponse: "Waiting Hold Response",
+  };
+  return statusMap[trimmedStatus] || rawStatus;
+}
+
+function mapSeverity(level: string): string {
+  const mapping: Record<string, string> = {
+    AVAILABILITY: "High",
+    ERROR: "High",
+    SLOWDOWN: "Medium",
+    PERFORMANCE: "Medium",
+    RESOURCE: "Low",
+    CUSTOM_ALERT: "Low",
+  };
+  return mapping[level] || "Medium";
+}
+
+function extractAppId(entities: any): string {
+  if (!entities) return "phubeft";
+  const entityStr = JSON.stringify(entities).toLowerCase();
+  if (entityStr.includes("mailbox")) return "mailbox";
+  if (entityStr.includes("phub-ip")) return "phubip";
+  if (entityStr.includes("phub-eft")) return "phubeft";
+  if (entityStr.includes("phub-lvpe")) return "phublvpe";
+  if (entityStr.includes("phub-cps")) return "phubcps";
+  return "phubeft";
+}
 
 function formatMoney(v: number, ccy: string) {
   return new Intl.NumberFormat("en-CA", {
@@ -178,8 +447,51 @@ export default function DemoDashboard() {
   const [maxValue, setMaxValue] = useState("");
   const [tabValue, setTabValue] = useState(0);
 
+  const [payments, setPayments] = useState<any[]>([]);
+  const [healthMap, setHealthMap] = useState<Record<string, number>>({});
+  const [incidents, setIncidents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const appHealth = useCallback(
+    (appId: string) => {
+      return healthMap[appId] ?? 90;
+    },
+    [healthMap]
+  );
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [paymentsData, healthData, incidentsData] = await Promise.all([
+        fetchPaymentsFromBizEvents(),
+        fetchApplicationHealthFromDynatrace(),
+        fetchIncidentsFromDynatrace(),
+      ]);
+
+      console.log(`Loaded ${paymentsData.length} payment transactions`);
+      setPayments(paymentsData);
+      setHealthMap(healthData);
+      setIncidents(incidentsData);
+      setLastRefresh(new Date());
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch data from Dynatrace");
+      console.error("Error fetching Dynatrace data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 60000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
   const filtered = useMemo(() => {
-    return demoPayments.filter((p) => {
+    return payments.filter((p) => {
       if (status !== "all" && p.status !== status) return false;
       if (dir !== "all" && p.direction !== dir) return false;
       if (app !== "all" && !p.appPath.some((h) => h.appId === app))
@@ -197,7 +509,7 @@ export default function DemoDashboard() {
       if (q.includes("*")) return wildmatch(q, hay);
       return hay.toLowerCase().includes(q.toLowerCase());
     });
-  }, [q, status, app, paymentType, dir, minValue, maxValue]);
+  }, [payments, q, status, app, paymentType, dir, minValue, maxValue]);
 
   const stageVolumeData = useMemo(() => {
     return applications.map((app) => {
@@ -206,7 +518,7 @@ export default function DemoDashboard() {
       ).length;
       return { x: app.name, y: count };
     });
-  }, [filtered, applications]);
+  }, [filtered]);
 
   const kpi = useMemo(() => {
     const total = filtered.length;
@@ -238,7 +550,7 @@ export default function DemoDashboard() {
       pacsOk,
       healthOverall,
     };
-  }, [filtered]);
+  }, [filtered, appHealth]);
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#fafafa" }}>
@@ -271,7 +583,7 @@ export default function DemoDashboard() {
             paymentType={paymentType}
             setPaymentType={setPaymentType}
             applications={applications}
-            demoPayments={demoPayments}
+            demoPayments={payments}
             minValue={minValue}
             setMinValue={setMinValue}
             maxValue={maxValue}

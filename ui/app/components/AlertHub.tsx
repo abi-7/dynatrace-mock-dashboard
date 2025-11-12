@@ -1,5 +1,5 @@
 import React from "react";
-import { Typography, Chip } from "@mui/material";
+import { Typography, Chip, Link } from "@mui/material";
 import { Warning } from "@mui/icons-material";
 import { Card, CardContent, CardHeader, CardTitle } from "./CardComponent";
 
@@ -94,6 +94,18 @@ export const IncidentsHub: React.FC<IncidentsHubProps> = ({
                   <Typography variant="caption" color="textSecondary">
                     {x.id} • opened {timeAgo(x.opened)}
                   </Typography>
+                  <Link
+                    /* eslint-disable-next-line no-secrets/no-secrets */
+                    href={`https://wkf10640.apps.dynatrace.com/ui/apps/dynatrace.davis.problems/problem/2999564033672670979_1762527240000V2`}
+                    underline="hover"
+                    style={{
+                      display: "block",
+                      marginTop: 8,
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    Incident Drill Down →
+                  </Link>
                 </CardContent>
               </Card>
             );

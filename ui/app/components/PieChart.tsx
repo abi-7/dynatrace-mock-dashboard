@@ -31,7 +31,7 @@ export const StatusMixChart: React.FC<StatusMixProps> = ({ filtered }) => {
                 <Pie
                   dataKey="value"
                   data={statusData}
-                  outerRadius={90}
+                  outerRadius={80}
                   label={(entry: any) => entry.name}
                 />
               </PieChart>
