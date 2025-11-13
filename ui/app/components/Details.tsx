@@ -1,19 +1,35 @@
 import React from "react";
-import { Typography, LinearProgress } from "@mui/material";
-import {
-  History,
-  FileDownload,
-  CheckCircle,
-  Warning,
-} from "@mui/icons-material";
-import { Card, CardContent } from "./CardComponent";
-import { Button } from "./Button";
+import { LinearProgress } from "@mui/material";
+import { CheckCircle, Warning } from "@mui/icons-material";
 
 interface PaymentDetailProps {
   p: any;
   applications: any[];
   appHealth: (id: string) => number;
   formatMoney: (v: number, ccy: string) => string;
+}
+
+function formatStatus(rawStatus: string): string {
+  // Trim the input to handle any trailing/leading spaces
+  const trimmedStatus = rawStatus?.trim() || "";
+
+  const statusMap: Record<string, string> = {
+    S_OutTxnComplete: "Completed",
+    S_WaitHostResponse: "Processing",
+    S_InTxnHostAccepted: "Host Accepted",
+    "S_AwaitingPosting/DistributionResponse": "Awaiting Posting/Distribution",
+    /* eslint-disable-next-line no-secrets/no-secrets */
+    S_WaitingLVPEResponse: "Waiting LVPE Response",
+    /* eslint-disable-next-line no-secrets/no-secrets */
+    S_WaitingPrefundHoldResponse: "Waiting Hold Response",
+  };
+  return statusMap[trimmedStatus] || rawStatus;
+}
+
+function getFlowStage(index: number): string {
+  const stages = ["Mailbox", "PHUB IP", "PHUB EFT", "PHUB LVPE", "PHUB CPS"];
+
+  return stages[index - 1] || "Unknown Stage";
 }
 
 export const PaymentDetail: React.FC<PaymentDetailProps> = ({
@@ -169,25 +185,28 @@ export const PaymentDetail: React.FC<PaymentDetailProps> = ({
           End-to-End Flow
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {console.log("Full appPath length:", p.appPath.length)}
-          {console.log(
-            "Unique entries:",
-            new Set(p.appPath.map((h) => `${h.appId}-${h.ts}`)).size
-          )}
-
           {p.appPath
+            //remove duplicates
             .filter((h: any, i: number, arr: any[]) => {
-              // Keep only the first occurrence of each unique appId+timestamp combo
               return (
                 arr.findIndex((x) => x.appId === h.appId && x.ts === h.ts) === i
               );
             })
-            .map((h: any, i: number) => {
+            .map((h: any, i: number, filteredArr: any[]) => {
+              const flowStage = getFlowStage(i + 1);
+              const isLastStep = i === filteredArr.length - 1;
+              console.log("Is last step:", {
+                index: i,
+                filteredLength: filteredArr.length,
+                isLastStep,
+              });
+
               console.log("Flow step:", {
                 index: i,
                 appId: h.appId,
+                simulatedStage: flowStage,
                 timestamp: h.ts,
-                status: h.status,
+                status: formatStatus(h.status),
                 formattedTime: new Date(h.ts).toLocaleString(),
                 compositeKey: `${h.appId}-${h.ts}-${i}`,
               });
@@ -205,15 +224,18 @@ export const PaymentDetail: React.FC<PaymentDetailProps> = ({
                       width: 10,
                       minWidth: 10,
                       borderRadius: "50%",
-                      background:
-                        appHealth(h.appId) > 90 ? "#22c55e" : "#f97316",
+                      background: isLastStep
+                        ? "#f59e0b" //yellow
+                        : appHealth(h.appId) > 90
+                        ? "#22c55e"
+                        : "#f97316",
                     }}
                   />
                   <div style={{ flex: 1 }}>
                     <div
                       style={{ fontWeight: 500, fontSize: 14, marginBottom: 3 }}
                     >
-                      {app?.name}{" "}
+                      {flowStage}{" "}
                       <span
                         style={{ color: "#666", fontSize: 12, marginBottom: 2 }}
                       >
@@ -221,7 +243,7 @@ export const PaymentDetail: React.FC<PaymentDetailProps> = ({
                       </span>
                     </div>
                     <div style={{ fontSize: 12, marginBottom: 2 }}>
-                      {h.status}
+                      {formatStatus(h.status)}
                     </div>
                   </div>
                 </div>
