@@ -1,14 +1,6 @@
 import React from "react";
-import {
-  Grid,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Typography,
-} from "@mui/material";
-import { FilterList, Search } from "@mui/icons-material";
+import { Grid } from "@mui/material";
+import { Search } from "@mui/icons-material";
 import { Card, CardContent, CardHeader, CardTitle } from "./CardComponent";
 import {
   Select as CustomSelect,
@@ -42,6 +34,12 @@ interface SearchFiltersProps {
   setMinValue: (value: string) => void;
   maxValue: string;
   setMaxValue: (value: string) => void;
+  timeRange: string;
+  setTimeRange: (value: string) => void;
+  customStartDate: string;
+  setCustomStartDate: (value: string) => void;
+  customEndDate: string;
+  setCustomEndDate: (value: string) => void;
 }
 
 export const SearchFilters: React.FC<SearchFiltersProps> = ({
@@ -61,7 +59,23 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
   setMinValue,
   maxValue,
   setMaxValue,
+  timeRange,
+  setTimeRange,
+  customStartDate,
+  setCustomStartDate,
+  customEndDate,
+  setCustomEndDate,
 }) => {
+  const handleTimeRangeChange = (value: string) => {
+    console.log("Time range changed to:", value);
+    setTimeRange(value);
+
+    // If switching away from custom, clear custom dates
+    if (value !== "custom") {
+      setCustomStartDate("");
+      setCustomEndDate("");
+    }
+  };
   return (
     <Card>
       <CardHeader>
@@ -160,17 +174,6 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
 
           {/* Payment Type Select */}
           <Grid size={{ xs: 12, sm: 6, md: 2 }}>
-            {/* Alerts Select */}
-            {/* <CustomSelect value={alertType} onValueChange={setAlertType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Alerts" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Any Alerts</SelectItem>
-                <SelectItem value="Alerts">With Alerts</SelectItem>
-                <SelectItem value="No Alerts">No Alerts</SelectItem>
-              </SelectContent>
-            </CustomSelect> */}
             <CustomSelect value={paymentType} onValueChange={setPaymentType}>
               <SelectTrigger>
                 <SelectValue placeholder="Payment Type" />
@@ -181,6 +184,48 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
               </SelectContent>
             </CustomSelect>
           </Grid>
+
+          {/* Time Range Select */}
+          <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+            <CustomSelect
+              value={timeRange}
+              onValueChange={handleTimeRangeChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Time Range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1h">Last 1 Hour</SelectItem>
+                <SelectItem value="6h">Last 6 Hours</SelectItem>
+                <SelectItem value="24h">Last 24 Hours</SelectItem>
+                <SelectItem value="7d">Last 7 Days</SelectItem>
+                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
+              </SelectContent>
+            </CustomSelect>
+          </Grid>
+
+          {/* Custom Date Inputs */}
+          {timeRange === "custom" && (
+            <>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Input
+                  type="datetime-local"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  placeholder="Start Date & Time"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Input
+                  type="datetime-local"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  placeholder="End Date & Time"
+                />
+              </Grid>
+            </>
+          )}
         </Grid>
       </CardContent>
     </Card>

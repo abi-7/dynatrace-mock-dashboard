@@ -1,10 +1,10 @@
 import React from "react";
-import { Grid, Typography } from "@mui/material";
+import { Typography } from "@mui/material";
 import { PieChart, Pie, ResponsiveContainer } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "./CardComponent"; // your custom Card components
+import { Card, CardContent, CardHeader, CardTitle } from "./CardComponent";
 
 interface StatusMixProps {
-  filtered: any[]; // array of payments or items to aggregate by status
+  filtered: any[];
 }
 
 export const StatusMixChart: React.FC<StatusMixProps> = ({ filtered }) => {

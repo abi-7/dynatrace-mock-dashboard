@@ -251,34 +251,6 @@ export const PaymentDetail: React.FC<PaymentDetailProps> = ({
             })}
         </div>
       </div>
-
-      {/* Actions */}
-      {/* <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginTop: "auto",
-          paddingTop: 16,
-        }}
-      >
-        <Button
-          variant="outline"
-          size="md"
-          // startIcon={<History fontSize="small" />}
-          style={{ textTransform: "none" }}
-        >
-          Full Timeline
-        </Button>
-        <Button
-          variant="outline"
-          size="md"
-          // startIcon={<FileDownload fontSize="small" />}
-          style={{ textTransform: "none" }}
-        >
-          Export Case
-        </Button>
-      </div> */}
     </div>
   );
 };

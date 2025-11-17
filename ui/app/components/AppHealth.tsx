@@ -35,7 +35,7 @@ export const AppsHealth: React.FC<AppsHealthProps> = ({
           <Grid
             key={a.id}
             size={{ xs: 12, sm: 6, md: 2.4 }}
-            style={{ display: "flex" }} // allows Card to stretch
+            style={{ display: "flex" }}
           >
             <div
               style={{

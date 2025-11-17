@@ -34,7 +34,7 @@ const applications = [
   { id: "phubcps", name: "PHUB CPS", tier: "Core", slaMs: 300000 },
 ];
 
-// Event type to application stage mapping
+//stage mapping for application path
 const EVENT_TYPE_TO_STAGE = {
   ip_pay_in: "phubip", // Data entering PHUB IP
   eft_pay_in: "phubeft", // Data entering PHUB EFT from IP
@@ -42,10 +42,51 @@ const EVENT_TYPE_TO_STAGE = {
   lvpe_cpa_aft: "phublvpe", // Data also entering LVPE
 };
 
+function getTimeCutoff(
+  timeRange: string,
+  customStart?: string,
+  customEnd?: string
+) {
+  const now = Date.now();
+
+  if (timeRange === "custom" && customStart && customEnd) {
+    return {
+      start: new Date(customStart).getTime(),
+      end: new Date(customEnd).getTime(),
+    };
+  }
+
+  let startTime: number;
+  switch (timeRange) {
+    case "1h":
+      startTime = now - 60 * 60 * 1000;
+      break;
+    case "6h":
+      startTime = now - 6 * 60 * 60 * 1000;
+      break;
+    case "24h":
+      startTime = now - 24 * 60 * 60 * 1000;
+      break;
+    case "7d":
+      startTime = now - 7 * 24 * 60 * 60 * 1000;
+      break;
+    case "30d":
+      startTime = now - 30 * 24 * 60 * 60 * 1000;
+      break;
+    default:
+      startTime = now - 24 * 60 * 60 * 1000;
+  }
+
+  return {
+    start: startTime,
+    end: now,
+  };
+}
+
 async function fetchPaymentsFromBizEvents() {
   try {
     const dqlQuery = `
-       fetch bizevents
+       fetch bizevents, from: now() - 30d, scanLimitGBytes: 5 
       | filter (event.type == "ip_pay_in" AND attribute.subtype == "PAY_IN")
     OR (event.type == "eft_pay_in" AND attribute.subtype == "PAY_IN")
     OR (event.type == "eft_lvpe_risk_update" AND attribute.subtype == "LVPE_RISK_UPDATE")
@@ -88,10 +129,12 @@ async function fetchPaymentsFromBizEvents() {
     `;
 
     console.log("Executing DQL query for bizevents...");
+    console.log("DQL Query:", dqlQuery);
 
     const response = await queryExecutionClient.queryExecute({
       body: {
         query: dqlQuery,
+        maxResultBytes: 10485760, //10MB
       },
     });
 
@@ -103,10 +146,9 @@ async function fetchPaymentsFromBizEvents() {
     console.log("Request token received:", response.requestToken);
 
     // Poll for results
-    // Poll for results with retry logic
     let result;
     let attempts = 0;
-    const maxAttempts = 20; // Poll up to 20 times
+    const maxAttempts = 20;
 
     while (attempts < maxAttempts) {
       result = await queryExecutionClient.queryPoll({
@@ -127,7 +169,7 @@ async function fetchPaymentsFromBizEvents() {
         throw new Error("Query execution failed");
       }
 
-      // Wait before next poll (exponential backoff)
+      // Wait before next poll
       await new Promise((resolve) =>
         setTimeout(resolve, Math.min(1000 * Math.pow(1.5, attempts), 5000))
       );
@@ -144,7 +186,7 @@ async function fetchPaymentsFromBizEvents() {
     }
 
     console.log(
-      `Successfully fetched ${result.result.records.length} bigevents`
+      `Successfully fetched ${result.result.records.length} bizevents`
     );
 
     const uniqueStatuses = new Set(result.result.records.map((r) => r.status));
@@ -261,106 +303,9 @@ async function fetchIncidentsFromDynatrace() {
   ];
 }
 
-// const demoPayments = Array.from({ length: 60 }).map((_, i) => {
-//   const directions = ["Incoming", "Outgoing", "Internal"];
-//   const statuses = ["Processing", "Completed", "On Hold", "Failed", "Queued"];
-//   const appsPath = [
-//     "mailbox",
-//     "phubip",
-//     Math.random() < 0.5 ? "phubeft" : "phublvpe",
-//     "phubcps",
-//   ];
-//   const amount = Math.round((Math.random() * 250000 + 5000) * 100) / 100;
-//   const base = Date.now() - Math.floor(Math.random() * 72) * 60 * 60 * 1000;
-//   const uetr = `UETR-${(100000 + i).toString(36)}-${(
-//     (Math.random() * 1e6) |
-//     0
-//   ).toString(36)}`.toUpperCase();
-//   const icn = `ICN${((Math.random() * 1e9) | 0).toString().padStart(9, "0")}`;
-
-//   const hops = [] as Array<{
-//     appId: string;
-//     ts: number;
-//     status: string;
-//     note?: string;
-//   }>;
-//   let t = base;
-//   for (const appId of appsPath) {
-//     const s = ["Received", "Validated", "Routed", "Booked", "Settled"][
-//       Math.floor(Math.random() * 5)
-//     ];
-//     hops.push({
-//       appId,
-//       ts: t,
-//       status: s,
-//       note: Math.random() < 0.1 ? "Retry due to timeout" : "",
-//     });
-//     t += 30000 + Math.floor(Math.random() * 90000);
-//   }
-
-//   const ackState = Math.random() < 0.85 ? "ACK" : "NACK";
-//   const pacs002 =
-//     Math.random() < 0.8 ? "pacs.002 received" : "pacs.002 pending";
-
-//   return {
-//     id: i + 1,
-//     direction: directions[Math.floor(Math.random() * directions.length)],
-//     channel: Math.random() < 0.5 ? "SWIFT" : "ISO 20022",
-//     status: statuses[Math.floor(Math.random() * statuses.length)],
-//     value: amount,
-//     currency: "CAD",
-//     client: ["Acme Corp", "Globex", "Wayne Ent.", "Initech", "Stark Ind."][
-//       Math.floor(Math.random() * 5)
-//     ],
-//     beneficiary: ["Contoso LLC", "Soylent", "Umbrella", "Wonka", "Tyrell"][
-//       Math.floor(Math.random() * 5)
-//     ],
-//     originator: ["Acme Treasury", "Payroll", "ERP", "Mobile", "Branch"][
-//       Math.floor(Math.random() * 5)
-//     ],
-//     appPath: hops,
-//     created: base,
-//     lastUpdate: t,
-//     scotiaClientId: `SC-${(10000 + i).toString()}`,
-//     segmentation: Math.random() < 0.4 ? "High Value" : "Retail",
-//     paymentType: "EFT",
-//     uetr,
-//     icn,
-//     ackState,
-//     pacs002,
-//   };
-// });
-
-// const incidents = [
-//   {
-//     id: "INC-4310",
-//     severity: "High",
-//     title: "PHUB LVPE settlement delay",
-//     appId: "phublvpe",
-//     opened: Date.now() - 35 * 60 * 1000,
-//     status: "Investigating",
-//   },
-//   {
-//     id: "INC-4321",
-//     severity: "Medium",
-//     title: "EFT backlog in PHUB EFT",
-//     appId: "phubeft",
-//     opened: Date.now() - 2 * 60 * 60 * 1000,
-//     status: "Mitigated",
-//   },
-//   {
-//     id: "AL-7802",
-//     severity: "Low",
-//     title: "Mailbox ingress latency",
-//     appId: "mailbox",
-//     opened: Date.now() - 20 * 60 * 1000,
-//     status: "Monitoring",
-//   },
-// ];
-
 //helper functions
 function formatStatus(rawStatus: string): string {
-  // Trim the input to handle any trailing/leading spaces
+  //handle extra trailing spaces
   const trimmedStatus = rawStatus?.trim() || "";
 
   const statusMap: Record<string, string> = {
@@ -376,29 +321,7 @@ function formatStatus(rawStatus: string): string {
   return statusMap[trimmedStatus] || rawStatus;
 }
 
-function mapSeverity(level: string): string {
-  const mapping: Record<string, string> = {
-    AVAILABILITY: "High",
-    ERROR: "High",
-    SLOWDOWN: "Medium",
-    PERFORMANCE: "Medium",
-    RESOURCE: "Low",
-    CUSTOM_ALERT: "Low",
-  };
-  return mapping[level] || "Medium";
-}
-
-function extractAppId(entities: any): string {
-  if (!entities) return "phubeft";
-  const entityStr = JSON.stringify(entities).toLowerCase();
-  if (entityStr.includes("mailbox")) return "mailbox";
-  if (entityStr.includes("phub-ip")) return "phubip";
-  if (entityStr.includes("phub-eft")) return "phubeft";
-  if (entityStr.includes("phub-lvpe")) return "phublvpe";
-  if (entityStr.includes("phub-cps")) return "phubcps";
-  return "phubeft";
-}
-
+// Formats number to currency string
 function formatMoney(v: number, ccy: string) {
   return new Intl.NumberFormat("en-CA", {
     style: "currency",
@@ -406,14 +329,8 @@ function formatMoney(v: number, ccy: string) {
     maximumFractionDigits: 2,
   }).format(v);
 }
-function timeAgo(ts: number) {
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m ago`;
-}
+
+// Wildmatch function for wildcard search
 function wildmatch(pattern: string, text: string) {
   const escaped = pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, "\\$&");
   const collapsed = escaped.replace(/\*+/g, "*");
@@ -423,18 +340,9 @@ function wildmatch(pattern: string, text: string) {
   return rx.test(text);
 }
 
+// Sets health color indicator based on value
 function healthColor(v: number) {
   return v > 90 ? "#16a34a" : "#f97316";
-}
-function appHealth(appId: string) {
-  const base = {
-    mailbox: 96,
-    phubip: 94,
-    phubeft: 91,
-    phublvpe: 89,
-    phubcps: 97,
-  } as Record<string, number>;
-  return base[appId] ?? 90;
 }
 
 export default function DemoDashboard() {
@@ -446,13 +354,13 @@ export default function DemoDashboard() {
   const [minValue, setMinValue] = useState("");
   const [maxValue, setMaxValue] = useState("");
   const [tabValue, setTabValue] = useState(0);
+  const [timeRange, setTimeRange] = useState<string>("30d");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
 
   const [payments, setPayments] = useState<any[]>([]);
   const [healthMap, setHealthMap] = useState<Record<string, number>>({});
   const [incidents, setIncidents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const appHealth = useCallback(
     (appId: string) => {
       return healthMap[appId] ?? 90;
@@ -462,9 +370,6 @@ export default function DemoDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
       const [paymentsData, healthData, incidentsData] = await Promise.all([
         fetchPaymentsFromBizEvents(),
         fetchApplicationHealthFromDynatrace(),
@@ -475,12 +380,8 @@ export default function DemoDashboard() {
       setPayments(paymentsData);
       setHealthMap(healthData);
       setIncidents(incidentsData);
-      setLastRefresh(new Date());
     } catch (err: any) {
-      setError(err.message || "Failed to fetch data from Dynatrace");
       console.error("Error fetching Dynatrace data:", err);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -491,25 +392,71 @@ export default function DemoDashboard() {
   }, [fetchData]);
 
   const filtered = useMemo(() => {
-    return payments.filter((p) => {
+    // Get time range cutoffs
+    const timeCutoff = getTimeCutoff(timeRange, customStartDate, customEndDate);
+    console.log("Filtering with time range:", timeRange, "Cutoff:", {
+      start: new Date(timeCutoff.start).toISOString(),
+      end: new Date(timeCutoff.end).toISOString(),
+    });
+    console.log("Total payments before filtering:", payments.length);
+
+    // Log first few payment timestamps to see the data
+    // For debugging purposes
+    if (payments.length > 0) {
+      const oldestPayment = payments.reduce((oldest, p) =>
+        p.created < oldest.created ? p : oldest
+      );
+      const newestPayment = payments.reduce((newest, p) =>
+        p.created > newest.created ? p : newest
+      );
+      console.log("Payment time range:", {
+        oldest: new Date(oldestPayment.created).toISOString(),
+        newest: new Date(newestPayment.created).toISOString(),
+      });
+    }
+
+    let filteredOutByTime = 0;
+
+    const filtered = payments.filter((p) => {
+      // Time range filter
+      const inTimeRange =
+        p.created >= timeCutoff.start && p.created <= timeCutoff.end;
+
+      if (!inTimeRange) {
+        filteredOutByTime++;
+        return false;
+      }
+
       if (status !== "all" && p.status !== status) return false;
       if (dir !== "all" && p.direction !== dir) return false;
-      if (app !== "all" && !p.appPath.some((h) => h.appId === app))
+      if (app !== "all" && !p.appPath.some((h: any) => h.appId === app))
         return false;
       if (minValue && p.value < Number(minValue)) return false;
       if (maxValue && p.value > Number(maxValue)) return false;
-      //   if (alertType !== "all") {
-      //     const hasIssue = p.appPath.some((h) => h.note && h.note.length > 0);
-      //     if (alertType === "Alerts" && !hasIssue) return false;
-      //     if (alertType === "No Alerts" && hasIssue) return false;
-      //   }
       if (paymentType && p.paymentType !== paymentType) return false;
       if (!q) return true;
       const hay = [p.client, p.uetr, p.icn, p.scotiaClientId].join("|");
       if (q.includes("*")) return wildmatch(q, hay);
       return hay.toLowerCase().includes(q.toLowerCase());
     });
-  }, [payments, q, status, app, paymentType, dir, minValue, maxValue]);
+
+    console.log(`Filtered out ${filteredOutByTime} payments by time range`);
+    console.log("Payments after all filtering:", filtered.length);
+
+    return filtered;
+  }, [
+    payments,
+    q,
+    status,
+    app,
+    paymentType,
+    dir,
+    minValue,
+    maxValue,
+    timeRange,
+    customStartDate,
+    customEndDate,
+  ]);
 
   const stageVolumeData = useMemo(() => {
     return applications.map((app) => {
@@ -560,9 +507,16 @@ export default function DemoDashboard() {
         elevation={1}
       >
         <Toolbar>
-          <div style={{ flexGrow: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <img
+                src="\ui\assets\scotia-logo.png"
+                alt="Logo"
+                style={{ height: 40, width: "auto" }}
+              />
+            </div>
             <Typography variant="h6" style={{ fontWeight: 600 }}>
-              Transactions [ mock app ]
+              Payment Transaction Tracker [mockup]
             </Typography>
           </div>
         </Toolbar>
@@ -588,6 +542,12 @@ export default function DemoDashboard() {
             setMinValue={setMinValue}
             maxValue={maxValue}
             setMaxValue={setMaxValue}
+            timeRange={timeRange}
+            setTimeRange={setTimeRange}
+            customStartDate={customStartDate}
+            setCustomStartDate={setCustomStartDate}
+            customEndDate={customEndDate}
+            setCustomEndDate={setCustomEndDate}
           />
 
           {/* KPI Cards */}

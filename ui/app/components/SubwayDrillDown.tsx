@@ -27,7 +27,6 @@ export const SubwayView: React.FC<SubwayViewProps> = ({
   healthColor,
   paymentType,
 }) => {
-  // Counter for wire labels
   let wireCount = 1;
   return (
     <Card>

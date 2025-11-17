@@ -41,7 +41,7 @@ export const Card = ({ href, inAppLink, imgSrc, name }: CardProps) => {
         boxShadow: `${BoxShadows.Surface.Raised.Rest}`,
       }}
     >
-      {/* An in-app link needs to be handled by react-router to avoid full page reloads */}
+      {/* to avoid full page reloads */}
       {inAppLink ? (
         <Link as={RouterLink} to={href}>
           {content}

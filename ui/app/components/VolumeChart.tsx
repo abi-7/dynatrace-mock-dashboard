@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "./CardComponent"; // use your custom card
+import { Card, CardContent, CardHeader, CardTitle } from "./CardComponent";
 
 interface VolumeDataPoint {
   x: string | number;

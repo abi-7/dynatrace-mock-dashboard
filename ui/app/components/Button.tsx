@@ -32,9 +32,9 @@ export function Button({
 
   // Size styles
   const sizeStyles: Record<string, React.CSSProperties> = {
-    sm: { height: 32 }, // h-8
-    md: { height: 36 }, // h-9
-    lg: { height: 44 }, // h-11
+    sm: { height: 32 },
+    md: { height: 36 },
+    lg: { height: 44 },
   };
 
   return (
@@ -43,7 +43,7 @@ export function Button({
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: 12, // rounded-xl
+        borderRadius: 12,
         padding: "0 12px",
         fontSize: 14,
         cursor: "pointer",

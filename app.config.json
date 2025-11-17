@@ -1,10 +1,10 @@
 {
   "environmentUrl": "https://wsi73818.apps.dynatrace.com/",
   "app": {
-    "name": "mock-payment-dashboard-V2",
-    "version": "0.1.1",
+    "name": "Payment Transaction Tracker [mockup]",
+    "version": "0.1.3",
     "description": "A starting project with routing, fetching data, and charting",
-    "id": "my.mock.payment.dashboard.v.2",
+    "id": "my.payment.transaction.tracker",
     "scopes": [
       { "name": "storage:logs:read", "comment": "default template" },
       { "name": "storage:buckets:read", "comment": "default template" },

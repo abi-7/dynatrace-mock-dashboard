@@ -7,8 +7,8 @@ interface MetricCardProps {
   icon: React.ReactNode;
   mainValue: string | number;
   subText?: string;
-  progress?: number; // optional, for linear progress
-  colorIndicator?: string; // optional small circle color
+  progress?: number;
+  colorIndicator?: string;
 }
 
 export const MetricCard: React.FC<MetricCardProps> = ({
@@ -69,7 +69,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
             )}
           </div>
 
-          {/* Optional progress bar - pushed to bottom */}
+          {/* Progress bar */}
           {progress !== undefined && (
             <div style={{ marginTop: "auto" }}>
               <LinearProgress

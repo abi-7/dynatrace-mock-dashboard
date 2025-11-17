@@ -10,7 +10,7 @@ import {
   Chip,
   Box,
 } from "@mui/material";
-import { Card, CardContent } from "./CardComponent"; // your custom Card component
+import { Card, CardContent } from "./CardComponent";
 import { Button } from "./Button";
 import { PaymentDetail } from "./Details";
 
